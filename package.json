@@ -1,0 +1,23 @@
+{
+  "name": "loanbook-api",
+  "version": "1.0.0",
+  "description": "Monthly interest tracker API for informal lending",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test tests/settlement.test.js",
+    "build": "cd frontend && npm install && npx vite build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.7.0",
+    "uuid": "^10.0.0"
+  }
+}
