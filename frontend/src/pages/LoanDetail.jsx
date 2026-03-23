@@ -12,14 +12,23 @@ export default function LoanDetail() {
   const [payments, setPayments] = useState([]);
   const [showRate, setShowRate] = useState(false);
   const [showPrincipal, setShowPrincipal] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [rateForm, setRateForm] = useState({ newRate: '', effectiveFrom: '' });
   const [principalForm, setPrincipalForm] = useState({ amount: '', notes: '' });
+  const [editForm, setEditForm] = useState({ principal: '', ratePerMonth: '', startDate: '', dateGiven: '', notes: '' });
   const [expandedPayment, setExpandedPayment] = useState(null);
 
   const loadData = useCallback(async () => {
     const l = await db.loans.get(Number(id));
     if (!l) return;
     setLoan(l);
+    setEditForm({
+      principal: String(l.principal),
+      ratePerMonth: String(l.ratePerMonth),
+      startDate: l.startDate,
+      dateGiven: l.notes?.match(/Money given: (\S+)/)?.[1] || '',
+      notes: (l.notes || '').replace(/\s*\|\s*Money given: \S+/, '').replace(/Money given: \S+\s*\|?\s*/, ''),
+    });
 
     const allPayments = await db.payments.toArray();
     const lPayments = allPayments.filter(p => String(p.loanId) === String(l.id));
@@ -79,6 +88,17 @@ export default function LoanDetail() {
     }
   };
 
+  const updateLoan = async () => {
+    const principal = Number(editForm.principal);
+    const ratePerMonth = Number(editForm.ratePerMonth);
+    if (!principal || !ratePerMonth || !editForm.startDate) { toast('Fill required fields'); return; }
+    const notes = [editForm.notes, editForm.dateGiven ? `Money given: ${editForm.dateGiven}` : ''].filter(Boolean).join(' | ');
+    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+    setShowEdit(false);
+    loadData();
+    toast('Loan updated');
+  };
+
   if (!loan || !status) return <div className="loader"><div className="spinner" /></div>;
 
   return (
@@ -86,6 +106,7 @@ export default function LoanDetail() {
       <div className="page-header">
         <button className="back" onClick={() => nav(-1)}>&#8249;</button>
         <h1>Loan Details</h1>
+        <button className="btn btn-small btn-secondary" onClick={() => setShowEdit(true)}>Edit</button>
       </div>
       <div className="page-content">
         {/* Summary */}
@@ -220,6 +241,37 @@ export default function LoanDetail() {
               <textarea value={principalForm.notes} onChange={e => setPrincipalForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             <button className="btn btn-primary" onClick={repayPrincipal} disabled={!principalForm.amount}>Record Repayment</button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Loan Modal */}
+      {showEdit && (
+        <div className="modal-overlay" onClick={() => setShowEdit(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Edit Loan</h3>
+            <div className="form-group">
+              <label>Principal Amount (₹)</label>
+              <input type="number" value={editForm.principal} onChange={e => setEditForm(f => ({ ...f, principal: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Rate Per Month (%)</label>
+              <input type="number" step="0.1" value={editForm.ratePerMonth} onChange={e => setEditForm(f => ({ ...f, ratePerMonth: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Start Month</label>
+              <input type="month" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Date Money Given</label>
+              <input type="date" value={editForm.dateGiven} onChange={e => setEditForm(f => ({ ...f, dateGiven: e.target.value }))} />
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>Optional — for your reference</div>
+            </div>
+            <div className="form-group">
+              <label>Notes (optional)</label>
+              <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <button className="btn btn-primary" onClick={updateLoan} disabled={!editForm.principal || !editForm.ratePerMonth || !editForm.startDate}>Save</button>
           </div>
         </div>
       )}
