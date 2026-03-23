@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PinLock from './components/PinLock';
+import { checkDueNotifications } from './utils/notifications';
 import Dashboard from './pages/Dashboard';
 import BorrowerDetail from './pages/BorrowerDetail';
 import LoanDetail from './pages/LoanDetail';
@@ -36,6 +37,11 @@ export default function App() {
   }, []);
 
   if (checking) return null;
+
+  // Check for due notifications when app is unlocked
+  useEffect(() => {
+    if (unlocked) checkDueNotifications();
+  }, [unlocked]);
 
   if (!unlocked) {
     return <PinLock hasPin={hasPin} onUnlock={() => setUnlocked(true)} onSetPin={() => setHasPin(true)} />;

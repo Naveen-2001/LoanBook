@@ -13,7 +13,7 @@ export default function BorrowerDetail() {
   const [showAddLoan, setShowAddLoan] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const [form, setForm] = useState({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '' });
+  const [form, setForm] = useState({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1' });
   const [editForm, setEditForm] = useState({ name: '', notes: '' });
 
   const loadData = useCallback(async () => {
@@ -59,6 +59,7 @@ export default function BorrowerDetail() {
         startDate: form.startDate,
         status: 'active',
         notes,
+        paymentFrequency: Number(form.paymentFrequency) || 1,
         rateHistory: [],
         principalRepayments: [],
         syncId,
@@ -67,7 +68,7 @@ export default function BorrowerDetail() {
       });
 
       setShowAddLoan(false);
-      setForm({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '' });
+      setForm({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1' });
       loadData();
       toast('Loan added');
     } catch (err) {
@@ -110,7 +111,7 @@ export default function BorrowerDetail() {
                   {loan.status === 'closed' ? 'closed' : loan.pendingMonths >= 2 ? 'overdue' : loan.totalPending > 0 ? 'partial' : 'paid'}
                 </span>
               </div>
-              <div className="card-subtitle">Since {loan.startDate} · Monthly {formatINR(loan.monthlyDue)}</div>
+              <div className="card-subtitle">Since {loan.startDate} · {({ 1: 'Monthly', 6: 'Half-yearly', 12: 'Yearly' }[loan.paymentFrequency] || 'Monthly')} · {formatINR(loan.monthlyDue)}/mo</div>
               <div className="card-row">
                 <span className="label">Pending</span>
                 <span className="value" style={{ color: loan.totalPending > 0 ? 'var(--red)' : 'var(--green)' }}>
@@ -168,6 +169,22 @@ export default function BorrowerDetail() {
                 {form.startMode === 'current'
                   ? 'Interest tracking starts from this month. Use this for old loans from your book.'
                   : 'Pick the first month interest was due. All months from then till now will show as pending.'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Payment Collection Frequency</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[{ v: '1', l: 'Monthly' }, { v: '6', l: '6 Months' }, { v: '12', l: 'Yearly' }].map(o => (
+                  <button key={o.v} className={`btn btn-small ${form.paymentFrequency === o.v ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setForm(f => ({ ...f, paymentFrequency: o.v }))} style={{ flex: 1 }}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+                {form.paymentFrequency === '1' ? 'Interest collected every month' :
+                 form.paymentFrequency === '6' ? 'Interest accumulates, collected every 6 months' :
+                 'Interest accumulates, collected once a year'}
               </div>
             </div>
             <div className="form-group">

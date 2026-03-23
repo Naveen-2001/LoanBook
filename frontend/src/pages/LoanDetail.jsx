@@ -15,7 +15,7 @@ export default function LoanDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [rateForm, setRateForm] = useState({ newRate: '', effectiveFrom: '' });
   const [principalForm, setPrincipalForm] = useState({ amount: '', notes: '' });
-  const [editForm, setEditForm] = useState({ principal: '', ratePerMonth: '', startDate: '', dateGiven: '', notes: '' });
+  const [editForm, setEditForm] = useState({ principal: '', ratePerMonth: '', startDate: '', dateGiven: '', notes: '', paymentFrequency: '1' });
   const [expandedPayment, setExpandedPayment] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -28,6 +28,7 @@ export default function LoanDetail() {
       startDate: l.startDate,
       dateGiven: l.notes?.match(/Money given: (\S+)/)?.[1] || '',
       notes: (l.notes || '').replace(/\s*\|\s*Money given: \S+/, '').replace(/Money given: \S+\s*\|?\s*/, ''),
+      paymentFrequency: String(l.paymentFrequency || 1),
     });
 
     const allPayments = await db.payments.toArray();
@@ -93,11 +94,32 @@ export default function LoanDetail() {
     const ratePerMonth = Number(editForm.ratePerMonth);
     if (!principal || !ratePerMonth || !editForm.startDate) { toast('Fill required fields'); return; }
     const notes = [editForm.notes, editForm.dateGiven ? `Money given: ${editForm.dateGiven}` : ''].filter(Boolean).join(' | ');
-    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, paymentFrequency: Number(editForm.paymentFrequency) || 1, syncStatus: 'pending', updatedAt: new Date().toISOString() });
     setShowEdit(false);
     loadData();
     toast('Loan updated');
   };
+
+  // Calculate next payment collection date based on frequency
+  const getNextPaymentDue = () => {
+    const freq = loan?.paymentFrequency || 1;
+    if (freq === 1) return null; // monthly — no special due date
+    const [startY, startM] = (loan?.startDate || '').split('-').map(Number);
+    if (!startY) return null;
+    const now = new Date();
+    const nowY = now.getFullYear();
+    const nowM = now.getMonth() + 1;
+    // Find next collection month: startM, startM+freq, startM+2*freq, ...
+    let m = startM;
+    let y = startY;
+    while (y < nowY || (y === nowY && m < nowM)) {
+      m += freq;
+      while (m > 12) { m -= 12; y++; }
+    }
+    return `${y}-${String(m).padStart(2, '0')}`;
+  };
+  const nextPaymentDue = getNextPaymentDue();
+  const freqLabel = { 1: 'Monthly', 6: 'Half-yearly', 12: 'Yearly' }[loan?.paymentFrequency || 1] || 'Monthly';
 
   if (!loan || !status) return <div className="loader"><div className="spinner" /></div>;
 
@@ -114,7 +136,7 @@ export default function LoanDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{formatINR(loan.principal)}</div>
-              <div style={{ color: 'var(--text2)', fontSize: 13 }}>{loan.ratePerMonth}%/mo · Since {loan.startDate}</div>
+              <div style={{ color: 'var(--text2)', fontSize: 13 }}>{loan.ratePerMonth}%/mo · {freqLabel} · Since {loan.startDate}</div>
             </div>
             <span className={`badge ${loan.status === 'closed' ? 'paid' : status.pendingMonths >= 2 ? 'overdue' : 'partial'}`}>
               {loan.status === 'closed' ? 'closed' : status.pendingMonths >= 2 ? 'overdue' : status.totalPending > 0 ? 'partial' : 'paid'}
@@ -142,8 +164,13 @@ export default function LoanDetail() {
         </div>
 
         {status.pendingSince && (
-          <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 16 }}>
+          <p style={{ color: 'var(--red)', fontSize: 13, marginBottom: 8 }}>
             Pending since {monthLabel(status.pendingSince)}
+          </p>
+        )}
+        {nextPaymentDue && (
+          <p style={{ color: 'var(--primary)', fontSize: 13, marginBottom: 16 }}>
+            Next collection due: {monthLabel(nextPaymentDue)}
           </p>
         )}
 
@@ -266,6 +293,17 @@ export default function LoanDetail() {
               <label>Date Money Given</label>
               <input type="date" value={editForm.dateGiven} onChange={e => setEditForm(f => ({ ...f, dateGiven: e.target.value }))} />
               <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>Optional — for your reference</div>
+            </div>
+            <div className="form-group">
+              <label>Payment Collection Frequency</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[{ v: '1', l: 'Monthly' }, { v: '6', l: '6 Months' }, { v: '12', l: 'Yearly' }].map(o => (
+                  <button key={o.v} className={`btn btn-small ${editForm.paymentFrequency === o.v ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setEditForm(f => ({ ...f, paymentFrequency: o.v }))} style={{ flex: 1 }}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="form-group">
               <label>Notes (optional)</label>
