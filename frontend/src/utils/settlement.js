@@ -93,6 +93,19 @@ export function settle(loan, existingPayments, newAmount, upToMonth) {
   const settlements = [];
   let remaining = newAmount;
 
+  // Settle old due first (accumulated unpaid interest from before tracking)
+  const oldDue = loan.oldDue || 0;
+  if (oldDue > 0) {
+    const oldPaid = paid['OLD_DUE'] || 0;
+    const oldRemaining = Math.round((oldDue - oldPaid) * 100) / 100;
+    if (oldRemaining > 0 && remaining > 0) {
+      const settledAmount = Math.min(remaining, oldRemaining);
+      const isFull = Math.abs(settledAmount - oldRemaining) < 0.01;
+      settlements.push({ forMonth: 'OLD_DUE', dueAmount: oldDue, settledAmount: Math.round(settledAmount * 100) / 100, isFull });
+      remaining = Math.round((remaining - settledAmount) * 100) / 100;
+    }
+  }
+
   for (const { month, due } of dues) {
     if (remaining <= 0) break;
     const alreadyPaid = paid[month] || 0;
@@ -110,6 +123,13 @@ export function getLoanStatus(loan, payments, upToMonth) {
   const dues = calculateMonthlyDues(loan, upToMonth);
   const paid = buildPaidMap(payments);
   let totalDue = 0, totalPaid = 0, pendingMonths = 0, pendingSince = null;
+
+  // Track old due
+  const oldDue = loan.oldDue || 0;
+  const oldDuePaid = Math.min(paid['OLD_DUE'] || 0, oldDue);
+  const oldDueRemaining = Math.round((oldDue - oldDuePaid) * 100) / 100;
+  totalDue += oldDue;
+  totalPaid += oldDuePaid;
 
   const months = dues.map(({ month, due }) => {
     const p = Math.min(paid[month] || 0, due);
@@ -140,6 +160,7 @@ export function getLoanStatus(loan, payments, upToMonth) {
     totalPaid: Math.round(totalPaid * 100) / 100,
     totalPending: Math.round((totalDue - totalPaid) * 100) / 100,
     pendingMonths, pendingSince, outstandingPrincipal,
+    oldDue, oldDuePaid, oldDueRemaining,
   };
 }
 
@@ -148,6 +169,7 @@ export function formatINR(amount) {
 }
 
 export function monthLabel(monthStr) {
+  if (monthStr === 'OLD_DUE') return 'Old Due';
   const d = new Date(monthStr + '-01');
   return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 }

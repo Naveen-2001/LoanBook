@@ -13,7 +13,7 @@ export default function BorrowerDetail() {
   const [showAddLoan, setShowAddLoan] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const [form, setForm] = useState({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1' });
+  const [form, setForm] = useState({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1', oldDue: '' });
   const [editForm, setEditForm] = useState({ name: '', notes: '' });
 
   const loadData = useCallback(async () => {
@@ -60,6 +60,7 @@ export default function BorrowerDetail() {
         status: 'active',
         notes,
         paymentFrequency: Number(form.paymentFrequency) || 1,
+        oldDue: Number(form.oldDue) || 0,
         rateHistory: [],
         principalRepayments: [],
         syncId,
@@ -68,7 +69,7 @@ export default function BorrowerDetail() {
       });
 
       setShowAddLoan(false);
-      setForm({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1' });
+      setForm({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1', oldDue: '' });
       loadData();
       toast('Loan added');
     } catch (err) {
@@ -169,6 +170,13 @@ export default function BorrowerDetail() {
                 {form.startMode === 'current'
                   ? 'Interest tracking starts from this month. Use this for old loans from your book.'
                   : 'Pick the first month interest was due. All months from then till now will show as pending.'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Old Unpaid Due (₹)</label>
+              <input type="number" value={form.oldDue} onChange={e => setForm(f => ({ ...f, oldDue: e.target.value }))} placeholder="0" />
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>
+                Accumulated unpaid interest from before tracking starts. Leave 0 if none.
               </div>
             </div>
             <div className="form-group">

@@ -15,7 +15,7 @@ export default function LoanDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [rateForm, setRateForm] = useState({ newRate: '', effectiveFrom: '' });
   const [principalForm, setPrincipalForm] = useState({ amount: '', notes: '' });
-  const [editForm, setEditForm] = useState({ principal: '', ratePerMonth: '', startDate: '', dateGiven: '', notes: '', paymentFrequency: '1' });
+  const [editForm, setEditForm] = useState({ principal: '', ratePerMonth: '', startDate: '', dateGiven: '', notes: '', paymentFrequency: '1', oldDue: '' });
   const [expandedPayment, setExpandedPayment] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -29,6 +29,7 @@ export default function LoanDetail() {
       dateGiven: l.notes?.match(/Money given: (\S+)/)?.[1] || '',
       notes: (l.notes || '').replace(/\s*\|\s*Money given: \S+/, '').replace(/Money given: \S+\s*\|?\s*/, ''),
       paymentFrequency: String(l.paymentFrequency || 1),
+      oldDue: String(l.oldDue || 0),
     });
 
     const allPayments = await db.payments.toArray();
@@ -94,7 +95,7 @@ export default function LoanDetail() {
     const ratePerMonth = Number(editForm.ratePerMonth);
     if (!principal || !ratePerMonth || !editForm.startDate) { toast('Fill required fields'); return; }
     const notes = [editForm.notes, editForm.dateGiven ? `Money given: ${editForm.dateGiven}` : ''].filter(Boolean).join(' | ');
-    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, paymentFrequency: Number(editForm.paymentFrequency) || 1, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, paymentFrequency: Number(editForm.paymentFrequency) || 1, oldDue: Number(editForm.oldDue) || 0, syncStatus: 'pending', updatedAt: new Date().toISOString() });
     setShowEdit(false);
     loadData();
     toast('Loan updated');
@@ -143,6 +144,22 @@ export default function LoanDetail() {
             </span>
           </div>
         </div>
+
+        {status.oldDue > 0 && (
+          <div className="card" style={{ background: 'var(--surface2)', borderLeft: `3px solid ${status.oldDueRemaining > 0 ? 'var(--orange)' : 'var(--green)'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 13, color: 'var(--text2)' }}>Old Due (before tracking)</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{formatINR(status.oldDue)}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {status.oldDueRemaining > 0
+                  ? <span style={{ color: 'var(--orange)', fontSize: 14 }}>Remaining: {formatINR(status.oldDueRemaining)}</span>
+                  : <span style={{ color: 'var(--green)', fontSize: 14 }}>Cleared ✓</span>}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="summary-grid">
           <div className="summary-card green">
@@ -293,6 +310,11 @@ export default function LoanDetail() {
               <label>Date Money Given</label>
               <input type="date" value={editForm.dateGiven} onChange={e => setEditForm(f => ({ ...f, dateGiven: e.target.value }))} />
               <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>Optional — for your reference</div>
+            </div>
+            <div className="form-group">
+              <label>Old Unpaid Due (₹)</label>
+              <input type="number" value={editForm.oldDue} onChange={e => setEditForm(f => ({ ...f, oldDue: e.target.value }))} placeholder="0" />
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 4 }}>Accumulated unpaid interest from before tracking started</div>
             </div>
             <div className="form-group">
               <label>Payment Collection Frequency</label>
