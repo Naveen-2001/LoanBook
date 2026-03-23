@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -9,5 +8,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 );
 
-// Register PWA service worker (handled by vite-plugin-pwa)
-registerSW({ immediate: true });
+// Register service worker safely
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
