@@ -78,6 +78,20 @@ export default function LoanDetail() {
     toast('Loan closed');
   };
 
+  const deleteLoan = async () => {
+    if (!confirm('Delete this loan and all its payments? This cannot be undone.')) return;
+    try {
+      const allPayments = await db.payments.toArray();
+      const loanPayments = allPayments.filter(p => String(p.loanId) === String(id));
+      for (const p of loanPayments) await db.payments.delete(p.id);
+      await db.loans.delete(Number(id));
+      toast('Loan deleted');
+      nav(-1);
+    } catch (err) {
+      toast('Error deleting: ' + err.message);
+    }
+  };
+
   const deletePayment = async (paymentId) => {
     if (!confirm('Delete this payment? Settlements will be recalculated.')) return;
     try {
@@ -207,6 +221,7 @@ export default function LoanDetail() {
           <button className="btn btn-small btn-secondary" onClick={() => setShowRate(true)}>Change Rate</button>
           <button className="btn btn-small btn-secondary" onClick={() => setShowPrincipal(true)}>Repay Principal</button>
           {loan.status === 'active' && <button className="btn btn-small btn-danger" onClick={closeLoan}>Close</button>}
+          <button className="btn btn-small btn-danger" onClick={deleteLoan}>Delete</button>
         </div>
 
         {/* Payments */}
