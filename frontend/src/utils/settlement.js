@@ -59,9 +59,16 @@ function getPrincipalForMonth(loan, month) {
   return Math.max(0, principal);
 }
 
+export function getPreviousMonth(monthStr) {
+  const { year, month } = parseMonth(monthStr);
+  if (month === 1) return formatMonth(year - 1, 12);
+  return formatMonth(year, month - 1);
+}
+
 export function calculateMonthlyDues(loan, upToMonth) {
   const startMonth = typeof loan.startDate === 'string' && loan.startDate.length === 7 ? loan.startDate : dateToMonth(loan.startDate);
-  const endMonth = upToMonth || getCurrentMonth();
+  // Interest for month X is due in month X+1, so dues go up to previous month
+  const endMonth = upToMonth || getPreviousMonth(getCurrentMonth());
   if (startMonth.localeCompare(endMonth) > 0) return [];
   return getMonthRange(startMonth, endMonth).map(month => {
     const rate = getRateForMonth(loan, month);

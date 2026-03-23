@@ -65,6 +65,15 @@ function dateToMonth(date) {
   return formatMonth(d.getFullYear(), d.getMonth() + 1);
 }
 
+/**
+ * Get the previous month as "YYYY-MM"
+ */
+function getPreviousMonth(monthStr) {
+  const { year, month } = parseMonth(monthStr);
+  if (month === 1) return formatMonth(year - 1, 12);
+  return formatMonth(year, month - 1);
+}
+
 module.exports = {
   getCurrentMonth,
   formatMonth,
@@ -72,4 +81,5 @@ module.exports = {
   getMonthRange,
   compareMonths,
   dateToMonth,
+  getPreviousMonth,
 };
