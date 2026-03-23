@@ -36,12 +36,12 @@ export default function App() {
     };
   }, []);
 
-  if (checking) return null;
-
   // Check for due notifications when app is unlocked
   useEffect(() => {
     if (unlocked) checkDueNotifications();
   }, [unlocked]);
+
+  if (checking) return null;
 
   if (!unlocked) {
     return <PinLock hasPin={hasPin} onUnlock={() => setUnlocked(true)} onSetPin={() => setHasPin(true)} />;
