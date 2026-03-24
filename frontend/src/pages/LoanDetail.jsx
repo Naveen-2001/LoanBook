@@ -150,7 +150,10 @@ export default function LoanDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{formatINR(loan.principal)}</div>
-              <div style={{ color: 'var(--text2)', fontSize: 13 }}>{loan.ratePerMonth}%/mo · {freqLabel} · Since {loan.startDate}</div>
+              <div style={{ color: 'var(--text2)', fontSize: 13 }}>
+                {loan.ratePerMonth}%/mo · {freqLabel} · Since {loan.startDate}
+                {loan.dateGiven && <span> · Due every {new Date(loan.dateGiven).getDate()}th</span>}
+              </div>
             </div>
             <span className={`badge ${loan.status === 'closed' ? 'paid' : status.pendingMonths >= 2 ? 'overdue' : 'partial'}`}>
               {loan.status === 'closed' ? 'closed' : status.pendingMonths >= 2 ? 'overdue' : status.totalPending > 0 ? 'partial' : 'paid'}

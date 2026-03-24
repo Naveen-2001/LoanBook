@@ -67,28 +67,34 @@ export function getPreviousMonth(monthStr) {
 
 export function calculateMonthlyDues(loan, upToMonth) {
   const startMonth = typeof loan.startDate === 'string' && loan.startDate.length === 7 ? loan.startDate : dateToMonth(loan.startDate);
-  // Interest for month X is due in month X+1, so dues go up to previous month
-  const endMonth = upToMonth || getPreviousMonth(getCurrentMonth());
-  if (startMonth.localeCompare(endMonth) > 0) return [];
 
-  // If dateGiven exists, pro-rate the first month
-  let proRataFraction = null;
-  if (loan.dateGiven) {
-    const d = new Date(loan.dateGiven);
-    const day = d.getDate();
-    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    const daysRemaining = daysInMonth - day + 1; // inclusive of given day
-    proRataFraction = daysRemaining / daysInMonth;
+  let endMonth;
+  if (upToMonth) {
+    endMonth = upToMonth;
+  } else if (loan.dateGiven) {
+    // Date-based tracking: due on the same day each month
+    // e.g., borrowed March 24 → March interest due April 24
+    const dueDay = new Date(loan.dateGiven).getDate();
+    const today = new Date();
+    const todayDay = today.getDate();
+    const currentMonth = getCurrentMonth();
+    if (todayDay >= dueDay) {
+      // Past due day this month → last month's interest is due
+      endMonth = getPreviousMonth(currentMonth);
+    } else {
+      // Haven't reached due day → only up to 2 months ago is due
+      endMonth = getPreviousMonth(getPreviousMonth(currentMonth));
+    }
+  } else {
+    // Month-based tracking: interest for month X is due in month X+1
+    endMonth = getPreviousMonth(getCurrentMonth());
   }
 
-  return getMonthRange(startMonth, endMonth).map((month, index) => {
+  if (startMonth.localeCompare(endMonth) > 0) return [];
+  return getMonthRange(startMonth, endMonth).map(month => {
     const rate = getRateForMonth(loan, month);
     const principal = getPrincipalForMonth(loan, month);
-    let due = principal * (rate / 100);
-    // Pro-rate only the first month if dateGiven was provided
-    if (index === 0 && proRataFraction !== null) {
-      due = due * proRataFraction;
-    }
+    const due = principal * (rate / 100);
     return { month, due: Math.round(due * 100) / 100 };
   });
 }
