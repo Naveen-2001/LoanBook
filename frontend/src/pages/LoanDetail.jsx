@@ -26,8 +26,8 @@ export default function LoanDetail() {
       principal: String(l.principal),
       ratePerMonth: String(l.ratePerMonth),
       startDate: l.startDate,
-      dateGiven: l.notes?.match(/Money given: (\S+)/)?.[1] || '',
-      notes: (l.notes || '').replace(/\s*\|\s*Money given: \S+/, '').replace(/Money given: \S+\s*\|?\s*/, ''),
+      dateGiven: l.dateGiven || l.notes?.match(/Money given: (\S+)/)?.[1] || '',
+      notes: l.dateGiven ? (l.notes || '') : (l.notes || '').replace(/\s*\|\s*Money given: \S+/, '').replace(/Money given: \S+\s*\|?\s*/, ''),
       paymentFrequency: String(l.paymentFrequency || 1),
       oldDue: String(l.oldDue || 0),
     });
@@ -108,8 +108,7 @@ export default function LoanDetail() {
     const principal = Number(editForm.principal);
     const ratePerMonth = Number(editForm.ratePerMonth);
     if (!principal || !ratePerMonth || !editForm.startDate) { toast('Fill required fields'); return; }
-    const notes = [editForm.notes, editForm.dateGiven ? `Money given: ${editForm.dateGiven}` : ''].filter(Boolean).join(' | ');
-    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, notes, paymentFrequency: Number(editForm.paymentFrequency) || 1, oldDue: Number(editForm.oldDue) || 0, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+    await db.loans.update(Number(id), { principal, ratePerMonth, startDate: editForm.startDate, dateGiven: editForm.dateGiven || null, notes: editForm.notes || '', paymentFrequency: Number(editForm.paymentFrequency) || 1, oldDue: Number(editForm.oldDue) || 0, syncStatus: 'pending', updatedAt: new Date().toISOString() });
     setShowEdit(false);
     loadData();
     toast('Loan updated');

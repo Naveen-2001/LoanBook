@@ -51,14 +51,14 @@ export default function BorrowerDetail() {
 
     try {
       const syncId = generateId();
-      const notes = [form.notes, form.dateGiven ? `Money given: ${form.dateGiven}` : ''].filter(Boolean).join(' | ');
       await db.loans.add({
         borrowerId: String(borrower.id),
         principal,
         ratePerMonth,
         startDate: form.startDate,
+        dateGiven: form.dateGiven || null,
         status: 'active',
-        notes,
+        notes: form.notes || '',
         paymentFrequency: Number(form.paymentFrequency) || 1,
         oldDue: Number(form.oldDue) || 0,
         rateHistory: [],

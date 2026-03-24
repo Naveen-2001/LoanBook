@@ -70,10 +70,26 @@ export function calculateMonthlyDues(loan, upToMonth) {
   // Interest for month X is due in month X+1, so dues go up to previous month
   const endMonth = upToMonth || getPreviousMonth(getCurrentMonth());
   if (startMonth.localeCompare(endMonth) > 0) return [];
-  return getMonthRange(startMonth, endMonth).map(month => {
+
+  // If dateGiven exists, pro-rate the first month
+  let proRataFraction = null;
+  if (loan.dateGiven) {
+    const d = new Date(loan.dateGiven);
+    const day = d.getDate();
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const daysRemaining = daysInMonth - day + 1; // inclusive of given day
+    proRataFraction = daysRemaining / daysInMonth;
+  }
+
+  return getMonthRange(startMonth, endMonth).map((month, index) => {
     const rate = getRateForMonth(loan, month);
     const principal = getPrincipalForMonth(loan, month);
-    return { month, due: Math.round(principal * (rate / 100) * 100) / 100 };
+    let due = principal * (rate / 100);
+    // Pro-rate only the first month if dateGiven was provided
+    if (index === 0 && proRataFraction !== null) {
+      due = due * proRataFraction;
+    }
+    return { month, due: Math.round(due * 100) / 100 };
   });
 }
 
