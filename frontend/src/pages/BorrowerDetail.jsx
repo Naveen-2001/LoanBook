@@ -84,6 +84,25 @@ export default function BorrowerDetail() {
     toast('Borrower updated');
   };
 
+  const deleteBorrower = async () => {
+    if (!confirm('Delete this borrower and ALL their loans and payments? This cannot be undone.')) return;
+    try {
+      const allLoans = await db.loans.toArray();
+      const bLoans = allLoans.filter(l => String(l.borrowerId) === String(id));
+      const allPayments = await db.payments.toArray();
+      for (const loan of bLoans) {
+        const lPayments = allPayments.filter(p => String(p.loanId) === String(loan.id));
+        for (const p of lPayments) await db.payments.delete(p.id);
+        await db.loans.delete(loan.id);
+      }
+      await db.borrowers.delete(Number(id));
+      toast('Borrower deleted');
+      nav('/');
+    } catch (err) {
+      toast('Error deleting: ' + err.message);
+    }
+  };
+
   if (!borrower) return <div className="loader"><div className="spinner" /></div>;
 
   return (
@@ -217,6 +236,7 @@ export default function BorrowerDetail() {
               <textarea value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             <button className="btn btn-primary" onClick={updateBorrower}>Save</button>
+            <button className="btn btn-danger" onClick={deleteBorrower} style={{ marginTop: 12 }}>Delete Borrower</button>
           </div>
         </div>
       )}
