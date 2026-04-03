@@ -17,6 +17,7 @@ const paymentSchema = new mongoose.Schema({
   photoProofUrl: { type: String, default: '' },
   settlements: [settlementSchema],
   syncId: { type: String, default: uuidv4 },
+  deletedAt: { type: Date, default: null, index: true },
 }, {
   timestamps: true,
 });

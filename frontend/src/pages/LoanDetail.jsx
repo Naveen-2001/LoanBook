@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import db from '../db';
-import { getLoanStatus, formatINR, monthLabel } from '../utils/settlement';
+import { getLoanStatus, formatINR, monthLabel, recalculateAllSettlements } from '../utils/settlement';
 import ToastContainer, { toast } from '../components/Toast';
+import { paymentBelongsToLoan } from '../utils/relations';
 
 export default function LoanDetail() {
   const { id } = useParams();
@@ -32,8 +33,8 @@ export default function LoanDetail() {
       oldDue: String(l.oldDue || 0),
     });
 
-    const allPayments = await db.payments.toArray();
-    const lPayments = allPayments.filter(p => String(p.loanId) === String(l.id));
+    const allPayments = (await db.payments.toArray()).filter(p => !p._deleted);
+    const lPayments = allPayments.filter(p => paymentBelongsToLoan(p, l));
     const s = getLoanStatus(l, lPayments);
     setStatus(s);
 
@@ -82,9 +83,19 @@ export default function LoanDetail() {
     if (!confirm('Delete this loan and all its payments? This cannot be undone.')) return;
     try {
       const allPayments = await db.payments.toArray();
-      const loanPayments = allPayments.filter(p => String(p.loanId) === String(id));
-      for (const p of loanPayments) await db.payments.delete(p.id);
-      await db.loans.delete(Number(id));
+      const loanPayments = allPayments.filter(p => paymentBelongsToLoan(p, loan));
+      for (const p of loanPayments) {
+        if (p.serverId) {
+          await db.payments.update(p.id, { _deleted: true, syncStatus: 'pending', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        } else {
+          await db.payments.delete(p.id);
+        }
+      }
+      if (loan.serverId) {
+        await db.loans.update(Number(id), { _deleted: true, syncStatus: 'pending', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      } else {
+        await db.loans.delete(Number(id));
+      }
       toast('Loan deleted');
       nav(-1);
     } catch (err) {
@@ -95,7 +106,32 @@ export default function LoanDetail() {
   const deletePayment = async (paymentId) => {
     if (!confirm('Delete this payment? Settlements will be recalculated.')) return;
     try {
-      await db.payments.delete(paymentId);
+      const remainingPayments = (await db.payments.toArray())
+        .filter(p => !p._deleted && paymentBelongsToLoan(p, loan) && p.id !== paymentId);
+
+      if (paymentId) {
+        const targetPayment = await db.payments.get(paymentId);
+        if (targetPayment?.serverId) {
+          await db.payments.update(paymentId, {
+            _deleted: true,
+            syncStatus: 'pending',
+            deletedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          await db.payments.delete(paymentId);
+        }
+      }
+
+      const recalculated = recalculateAllSettlements(loan, remainingPayments);
+      for (const payment of recalculated) {
+        await db.payments.update(payment.id, {
+          settlements: payment.settlements,
+          syncStatus: payment.serverId ? 'pending' : payment.syncStatus,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       setExpandedPayment(null);
       loadData();
       toast('Payment deleted');
@@ -155,7 +191,7 @@ export default function LoanDetail() {
                 {loan.dateGiven && <span> · Due every {new Date(loan.dateGiven).getDate()}th</span>}
               </div>
             </div>
-            <span className={`badge ${loan.status === 'closed' ? 'paid' : status.pendingMonths >= 2 ? 'overdue' : 'partial'}`}>
+            <span className={`badge ${loan.status === 'closed' ? 'paid' : status.pendingMonths >= 2 ? 'overdue' : status.totalPending > 0 ? 'partial' : 'paid'}`}>
               {loan.status === 'closed' ? 'closed' : status.pendingMonths >= 2 ? 'overdue' : status.totalPending > 0 ? 'partial' : 'paid'}
             </span>
           </div>

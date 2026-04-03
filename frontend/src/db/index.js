@@ -2,10 +2,10 @@ import Dexie from 'dexie';
 
 const db = new Dexie('LoanBookDB');
 
-db.version(2).stores({
-  borrowers: '++id, name, syncId, syncStatus',
-  loans: '++id, borrowerId, status, syncId, syncStatus',
-  payments: '++id, loanId, paidDate, syncId, syncStatus',
+db.version(3).stores({
+  borrowers: '++id, name, syncId, syncStatus, serverId, _deleted',
+  loans: '++id, borrowerId, borrowerSyncId, status, syncId, syncStatus, serverId, _deleted',
+  payments: '++id, loanId, loanSyncId, paidDate, syncId, syncStatus, serverId, _deleted',
   settings: 'key',
 });
 

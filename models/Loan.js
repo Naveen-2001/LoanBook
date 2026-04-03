@@ -18,11 +18,15 @@ const loanSchema = new mongoose.Schema({
   principal: { type: Number, required: true },
   ratePerMonth: { type: Number, required: true },
   startDate: { type: String, required: true }, // "YYYY-MM"
+  dateGiven: { type: Date, default: null },
+  paymentFrequency: { type: Number, enum: [1, 6, 12], default: 1 },
+  oldDue: { type: Number, default: 0, min: 0 },
   status: { type: String, enum: ['active', 'closed'], default: 'active' },
   notes: { type: String, default: '' },
   rateHistory: [rateHistorySchema],
   principalRepayments: [principalRepaymentSchema],
   syncId: { type: String, default: uuidv4 },
+  deletedAt: { type: Date, default: null, index: true },
 }, {
   timestamps: true,
 });

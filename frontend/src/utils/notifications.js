@@ -1,4 +1,5 @@
 import db from '../db';
+import { loanBelongsToBorrower } from './relations';
 
 const FREQ_LABELS = { 1: 'Monthly', 6: 'Half-yearly', 12: 'Yearly' };
 
@@ -18,10 +19,8 @@ function getNextCollectionMonth(startDate, frequency) {
 
 export async function checkDueNotifications() {
   try {
-    const loans = await db.loans.toArray();
-    const borrowers = await db.borrowers.toArray();
-    const borrowerMap = {};
-    borrowers.forEach(b => { borrowerMap[String(b.id)] = b.name; });
+    const loans = (await db.loans.toArray()).filter(l => !l._deleted);
+    const borrowers = (await db.borrowers.toArray()).filter(b => !b._deleted);
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -34,7 +33,7 @@ export async function checkDueNotifications() {
 
       const nextDue = getNextCollectionMonth(loan.startDate, freq);
       if (nextDue === currentMonth) {
-        const borrowerName = borrowerMap[String(loan.borrowerId)] || 'Unknown';
+        const borrowerName = borrowers.find(b => loanBelongsToBorrower(loan, b))?.name || 'Unknown';
         dueLoans.push({ loan, borrowerName, freq });
       }
     }

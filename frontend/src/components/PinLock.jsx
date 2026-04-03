@@ -3,7 +3,7 @@ import { useState } from 'react';
 export default function PinLock({ hasPin, onUnlock, onSetPin }) {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [isSettingPin, setIsSettingPin] = useState(!hasPin);
+  const [isSettingPin] = useState(!hasPin);
   const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState('');
 

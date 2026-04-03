@@ -5,6 +5,7 @@ import { getLoanStatus, formatINR } from '../utils/settlement';
 import { syncToServer, pullFromServer, isLoggedIn } from '../api/client';
 import ToastContainer, { toast } from '../components/Toast';
 import { generateId } from '../utils/uuid';
+import { loanBelongsToBorrower, paymentBelongsToLoan, normalizeBorrowerRecord } from '../utils/relations';
 
 export default function Dashboard() {
   const nav = useNavigate();
@@ -19,20 +20,20 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     try {
-    const allBorrowers = await db.borrowers.toArray();
-    const allLoans = await db.loans.where('status').equals('active').toArray();
-    const allPayments = await db.payments.toArray();
+    const allBorrowers = (await db.borrowers.toArray()).filter(b => !b._deleted);
+    const allLoans = (await db.loans.where('status').equals('active').toArray()).filter(l => !l._deleted);
+    const allPayments = (await db.payments.toArray()).filter(p => !p._deleted);
 
     let totalLent = 0, totalMonthlyDue = 0, totalPending = 0, totalCollected = 0;
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     const enriched = allBorrowers.map(b => {
-      const bLoans = allLoans.filter(l => String(l.borrowerId) === String(b.id));
+      const bLoans = allLoans.filter(l => loanBelongsToBorrower(l, b));
       let bPending = 0, bPendingMonths = 0, bPendingSince = null, bLastPayment = null;
 
       for (const loan of bLoans) {
-        const lPayments = allPayments.filter(p => String(p.loanId) === String(loan.id));
+        const lPayments = allPayments.filter(p => paymentBelongsToLoan(p, loan));
         const status = getLoanStatus(loan, lPayments);
         totalLent += loan.principal;
         totalMonthlyDue += status.monthlyDue;
@@ -97,7 +98,16 @@ export default function Dashboard() {
     if (!newName.trim()) return;
     try {
       const syncId = generateId();
-      await db.borrowers.add({ name: newName.trim(), notes: newNotes, syncId, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+      await db.borrowers.add(normalizeBorrowerRecord({
+        name: newName.trim(),
+        notes: newNotes,
+        syncId,
+        updatedAt: new Date().toISOString(),
+      }, {
+        syncStatus: 'pending',
+        _deleted: false,
+        deletedAt: null,
+      }));
       setShowAdd(false);
       setNewName('');
       setNewNotes('');

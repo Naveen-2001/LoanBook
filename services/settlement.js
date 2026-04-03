@@ -65,8 +65,21 @@ function calculateMonthlyDues(loan, upToMonth) {
   const startMonth = typeof loan.startDate === 'string' && loan.startDate.length === 7
     ? loan.startDate
     : dateToMonth(loan.startDate);
-  // Interest for month X is due in month X+1, so dues go up to previous month
-  const endMonth = upToMonth || getPreviousMonth(getCurrentMonth());
+
+  let endMonth;
+  if (upToMonth) {
+    endMonth = upToMonth;
+  } else if (loan.dateGiven) {
+    const dueDay = new Date(loan.dateGiven).getDate();
+    const today = new Date();
+    const currentMonth = getCurrentMonth();
+    endMonth = today.getDate() >= dueDay
+      ? getPreviousMonth(currentMonth)
+      : getPreviousMonth(getPreviousMonth(currentMonth));
+  } else {
+    // Interest for month X is due in month X+1, so dues go up to previous month.
+    endMonth = getPreviousMonth(getCurrentMonth());
+  }
 
   if (compareMonths(startMonth, endMonth) > 0) {
     return [];
@@ -114,6 +127,22 @@ function settle(loan, existingPayments, newPaymentAmount, upToMonth) {
 
   const settlements = [];
   let remaining = newPaymentAmount;
+
+  const oldDue = loan.oldDue || 0;
+  if (oldDue > 0) {
+    const oldPaid = paidMap.OLD_DUE || 0;
+    const oldRemaining = Math.round((oldDue - oldPaid) * 100) / 100;
+    if (oldRemaining > 0 && remaining > 0) {
+      const settledAmount = Math.min(remaining, oldRemaining);
+      settlements.push({
+        forMonth: 'OLD_DUE',
+        dueAmount: oldDue,
+        settledAmount: Math.round(settledAmount * 100) / 100,
+        isFull: Math.abs(settledAmount - oldRemaining) < 0.01,
+      });
+      remaining = Math.round((remaining - settledAmount) * 100) / 100;
+    }
+  }
 
   for (const { month, due } of monthlyDues) {
     if (remaining <= 0) break;
@@ -190,6 +219,12 @@ function getLoanStatus(loan, payments, upToMonth) {
   let pendingMonths = 0;
   let pendingSince = null;
 
+  const oldDue = loan.oldDue || 0;
+  const oldDuePaid = Math.min(paidMap.OLD_DUE || 0, oldDue);
+  const oldDueRemaining = Math.round((oldDue - oldDuePaid) * 100) / 100;
+  totalDue += oldDue;
+  totalPaid += oldDuePaid;
+
   const months = monthlyDues.map(({ month, due }) => {
     const paid = Math.min(paidMap[month] || 0, due);
     const remaining = Math.round((due - paid) * 100) / 100;
@@ -237,6 +272,9 @@ function getLoanStatus(loan, payments, upToMonth) {
     pendingMonths,
     pendingSince,
     outstandingPrincipal,
+    oldDue,
+    oldDuePaid,
+    oldDueRemaining,
   };
 }
 

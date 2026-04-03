@@ -4,29 +4,28 @@ const Loan = require('../models/Loan');
 const Payment = require('../models/Payment');
 const { getLoanStatus } = require('../services/settlement');
 const { getCurrentMonth } = require('../utils/monthHelpers');
+
 const router = express.Router();
 
-// GET /api/dashboard
 router.get('/', async (req, res) => {
   try {
-    const borrowers = await Borrower.find().sort({ name: 1 }).lean();
-    const loans = await Loan.find({ status: 'active' }).lean();
-    const payments = await Payment.find().lean();
+    const borrowers = await Borrower.find({ deletedAt: null }).sort({ name: 1 }).lean();
+    const loans = await Loan.find({ status: 'active', deletedAt: null }).lean();
+    const payments = await Payment.find({ deletedAt: null }).lean();
 
-    // Build lookup maps
     const loansByBorrower = {};
     const paymentsByLoan = {};
 
     for (const loan of loans) {
-      const bid = loan.borrowerId.toString();
-      if (!loansByBorrower[bid]) loansByBorrower[bid] = [];
-      loansByBorrower[bid].push(loan);
+      const borrowerId = loan.borrowerId.toString();
+      if (!loansByBorrower[borrowerId]) loansByBorrower[borrowerId] = [];
+      loansByBorrower[borrowerId].push(loan);
     }
 
     for (const payment of payments) {
-      const lid = payment.loanId.toString();
-      if (!paymentsByLoan[lid]) paymentsByLoan[lid] = [];
-      paymentsByLoan[lid].push(payment);
+      const loanId = payment.loanId.toString();
+      if (!paymentsByLoan[loanId]) paymentsByLoan[loanId] = [];
+      paymentsByLoan[loanId].push(payment);
     }
 
     let totalLent = 0;
@@ -36,64 +35,62 @@ router.get('/', async (req, res) => {
     const currentMonth = getCurrentMonth();
 
     const borrowerSummaries = borrowers.map(borrower => {
-      const bid = borrower._id.toString();
-      const bLoans = loansByBorrower[bid] || [];
+      const borrowerId = borrower._id.toString();
+      const borrowerLoans = loansByBorrower[borrowerId] || [];
 
-      let bTotalPrincipal = 0;
-      let bTotalPending = 0;
-      let bPendingMonths = 0;
-      let bPendingSince = null;
-      let bLastPaymentDate = null;
+      let borrowerPrincipal = 0;
+      let borrowerPending = 0;
+      let borrowerPendingMonths = 0;
+      let borrowerPendingSince = null;
+      let borrowerLastPaymentDate = null;
 
-      for (const loan of bLoans) {
-        const lid = loan._id.toString();
-        const lPayments = paymentsByLoan[lid] || [];
-        const status = getLoanStatus(loan, lPayments);
+      for (const loan of borrowerLoans) {
+        const loanId = loan._id.toString();
+        const loanPayments = paymentsByLoan[loanId] || [];
+        const status = getLoanStatus(loan, loanPayments);
 
-        bTotalPrincipal += loan.principal;
-        bTotalPending += status.totalPending;
-        bPendingMonths += status.pendingMonths;
+        borrowerPrincipal += loan.principal;
+        borrowerPending += status.totalPending;
+        borrowerPendingMonths += status.pendingMonths;
 
-        if (status.pendingSince && (!bPendingSince || status.pendingSince < bPendingSince)) {
-          bPendingSince = status.pendingSince;
+        if (status.pendingSince && (!borrowerPendingSince || status.pendingSince < borrowerPendingSince)) {
+          borrowerPendingSince = status.pendingSince;
         }
 
         totalMonthlyDue += status.monthlyDue;
 
-        // Find last payment date
-        for (const p of lPayments) {
-          const pDate = new Date(p.paidDate);
-          if (!bLastPaymentDate || pDate > bLastPaymentDate) {
-            bLastPaymentDate = pDate;
+        for (const payment of loanPayments) {
+          const paymentDate = new Date(payment.paidDate);
+          if (!borrowerLastPaymentDate || paymentDate > borrowerLastPaymentDate) {
+            borrowerLastPaymentDate = paymentDate;
           }
 
-          // Check if payment was this month
-          const pMonth = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}`;
-          if (pMonth === currentMonth) {
-            totalCollectedThisMonth += p.amount;
+          const paymentMonth = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+          if (paymentMonth === currentMonth) {
+            totalCollectedThisMonth += payment.amount;
           }
         }
       }
 
-      totalLent += bTotalPrincipal;
-      totalPending += bTotalPending;
+      totalLent += borrowerPrincipal;
+      totalPending += borrowerPending;
 
-      let bStatus = 'paid';
-      if (bPendingMonths > 0 && bTotalPending > 0) {
-        bStatus = bPendingMonths >= 2 ? 'overdue' : 'partial';
+      let status = 'paid';
+      if (borrowerPendingMonths > 0 && borrowerPending > 0) {
+        status = borrowerPendingMonths >= 2 ? 'overdue' : 'partial';
       }
 
       return {
         _id: borrower._id,
         name: borrower.name,
         notes: borrower.notes,
-        loanCount: bLoans.length,
-        totalPrincipal: bTotalPrincipal,
-        totalPending: bTotalPending,
-        pendingMonths: bPendingMonths,
-        pendingSince: bPendingSince,
-        lastPaymentDate: bLastPaymentDate,
-        status: bStatus,
+        loanCount: borrowerLoans.length,
+        totalPrincipal: borrowerPrincipal,
+        totalPending: borrowerPending,
+        pendingMonths: borrowerPendingMonths,
+        pendingSince: borrowerPendingSince,
+        lastPaymentDate: borrowerLastPaymentDate,
+        status,
       };
     });
 

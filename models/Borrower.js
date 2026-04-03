@@ -5,6 +5,7 @@ const borrowerSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   notes: { type: String, default: '' },
   syncId: { type: String, default: uuidv4 },
+  deletedAt: { type: Date, default: null, index: true },
 }, {
   timestamps: true,
 });

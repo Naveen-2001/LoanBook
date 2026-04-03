@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import db from '../db';
 import { getLoanStatus, formatINR, monthLabel } from '../utils/settlement';
+import { loanBelongsToBorrower, paymentBelongsToLoan } from '../utils/relations';
 
 export default function PaymentReceipt() {
   const { id } = useParams();
@@ -17,17 +18,17 @@ export default function PaymentReceipt() {
       if (!p) return;
       setPayment(p);
 
-      const allLoans = await db.loans.toArray();
-      const l = allLoans.find(l => String(l.id) === String(p.loanId));
+      const allLoans = (await db.loans.toArray()).filter(l => !l._deleted);
+      const l = allLoans.find(loan => paymentBelongsToLoan(p, loan));
       setLoan(l);
 
       if (l) {
-        const allBorrowers = await db.borrowers.toArray();
-        const b = allBorrowers.find(b => String(b.id) === String(l.borrowerId));
+        const allBorrowers = (await db.borrowers.toArray()).filter(b => !b._deleted);
+        const b = allBorrowers.find(borrower => loanBelongsToBorrower(l, borrower));
         setBorrower(b);
 
-        const allPayments = await db.payments.toArray();
-        const lPayments = allPayments.filter(pay => String(pay.loanId) === String(l.id));
+        const allPayments = (await db.payments.toArray()).filter(pay => !pay._deleted);
+        const lPayments = allPayments.filter(pay => paymentBelongsToLoan(pay, l));
         const status = getLoanStatus(l, lPayments);
         setRemaining(status);
       }

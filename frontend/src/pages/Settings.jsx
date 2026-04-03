@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import db from '../db';
 import { login, logout, isLoggedIn, syncToServer, pullFromServer } from '../api/client';
 import ToastContainer, { toast } from '../components/Toast';
+import { generateId } from '../utils/uuid';
+import { normalizeBorrowerRecord, normalizeLoanRecord, normalizePaymentRecord } from '../utils/relations';
 
 export default function Settings() {
   const nav = useNavigate();
@@ -13,7 +15,6 @@ export default function Settings() {
   const [lastSync, setLastSync] = useState(localStorage.getItem('loanbook_last_sync') || 'Never');
   const [showChangePin, setShowChangePin] = useState(false);
   const [newPin, setNewPin] = useState('');
-  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -100,12 +101,63 @@ export default function Settings() {
 
       if (!confirm(`Import ${data.borrowers.length} borrowers, ${data.loans.length} loans, ${data.payments.length} payments? This will REPLACE all local data.`)) return;
 
+      const borrowers = data.borrowers.map(borrower => normalizeBorrowerRecord({
+        ...borrower,
+        id: undefined,
+        syncId: borrower.syncId || generateId(),
+      }, {
+        syncStatus: borrower.syncStatus || 'synced',
+        _deleted: Boolean(borrower._deleted),
+      }));
+
+      const borrowerIdToSyncId = new Map();
+      borrowers.forEach((borrower, index) => {
+        const source = data.borrowers[index];
+        if (source?.id !== undefined) borrowerIdToSyncId.set(String(source.id), borrower.syncId);
+        if (source?.syncId) borrowerIdToSyncId.set(String(source.syncId), borrower.syncId);
+      });
+
+      const loans = data.loans.map(loan => {
+        const borrowerSyncId = borrowerIdToSyncId.get(String(loan.borrowerSyncId || loan.borrowerId)) || loan.borrowerSyncId || loan.borrowerId || generateId();
+        return normalizeLoanRecord({
+          ...loan,
+          id: undefined,
+          syncId: loan.syncId || generateId(),
+          borrowerId: borrowerSyncId,
+          borrowerSyncId,
+        }, {
+          syncStatus: loan.syncStatus || 'synced',
+          _deleted: Boolean(loan._deleted),
+        });
+      });
+
+      const loanIdToSyncId = new Map();
+      loans.forEach((loan, index) => {
+        const source = data.loans[index];
+        if (source?.id !== undefined) loanIdToSyncId.set(String(source.id), loan.syncId);
+        if (source?.syncId) loanIdToSyncId.set(String(source.syncId), loan.syncId);
+      });
+
+      const payments = data.payments.map(payment => {
+        const loanSyncId = loanIdToSyncId.get(String(payment.loanSyncId || payment.loanId)) || payment.loanSyncId || payment.loanId || generateId();
+        return normalizePaymentRecord({
+          ...payment,
+          id: undefined,
+          syncId: payment.syncId || generateId(),
+          loanId: loanSyncId,
+          loanSyncId,
+        }, {
+          syncStatus: payment.syncStatus || 'synced',
+          _deleted: Boolean(payment._deleted),
+        });
+      });
+
       await db.borrowers.clear();
       await db.loans.clear();
       await db.payments.clear();
-      await db.borrowers.bulkAdd(data.borrowers.map(b => ({ ...b, id: undefined })));
-      await db.loans.bulkAdd(data.loans.map(l => ({ ...l, id: undefined })));
-      await db.payments.bulkAdd(data.payments.map(p => ({ ...p, id: undefined })));
+      await db.borrowers.bulkAdd(borrowers);
+      await db.loans.bulkAdd(loans);
+      await db.payments.bulkAdd(payments);
 
       e.target.value = '';
       toast('Data restored successfully');
@@ -121,6 +173,7 @@ export default function Settings() {
     await db.borrowers.clear();
     await db.loans.clear();
     await db.payments.clear();
+    localStorage.removeItem('loanbook_last_sync');
     toast('All data cleared');
   };
 

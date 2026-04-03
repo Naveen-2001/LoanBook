@@ -14,11 +14,36 @@ const {
 
 const { getMonthRange, compareMonths } = require('../utils/monthHelpers');
 
+function withMockedNow(isoString, fn) {
+  const RealDate = Date;
+  class MockDate extends RealDate {
+    constructor(...args) {
+      if (args.length === 0) {
+        super(isoString);
+      } else {
+        super(...args);
+      }
+    }
+    static now() {
+      return new RealDate(isoString).getTime();
+    }
+  }
+  global.Date = MockDate;
+  try {
+    return fn();
+  } finally {
+    global.Date = RealDate;
+  }
+}
+
 // ─── Helper: basic loan ───
 const baseLoan = {
   principal: 300000,
   ratePerMonth: 2,
   startDate: '2025-01',
+  dateGiven: null,
+  paymentFrequency: 1,
+  oldDue: 0,
   rateHistory: [],
   principalRepayments: [],
 };
@@ -154,6 +179,14 @@ describe('calculateMonthlyDues', () => {
     const dues = calculateMonthlyDues(loan, '2025-12');
     assert.strictEqual(dues.length, 0);
   });
+
+  it('uses borrowing date cutoff when dateGiven exists', () => {
+    const loan = { ...baseLoan, startDate: '2025-01', dateGiven: '2025-01-24' };
+    const duesBeforeDueDay = withMockedNow('2025-03-20T00:00:00.000Z', () => calculateMonthlyDues(loan));
+    const duesAfterDueDay = withMockedNow('2025-04-25T00:00:00.000Z', () => calculateMonthlyDues(loan));
+    assert.deepStrictEqual(duesBeforeDueDay.map(d => d.month), ['2025-01']);
+    assert.deepStrictEqual(duesAfterDueDay.map(d => d.month), ['2025-01', '2025-02', '2025-03']);
+  });
 });
 
 // ─── buildPaidMap ───
@@ -271,6 +304,15 @@ describe('settle', () => {
     assert.strictEqual(result.settlements[1].settledAmount, 3000);
     assert.strictEqual(result.settlements[1].isFull, false);
   });
+
+  it('settles old due before monthly dues', () => {
+    const loan = { ...baseLoan, oldDue: 5000 };
+    const result = settle(loan, [], 7000, '2025-01');
+    assert.strictEqual(result.settlements[0].forMonth, 'OLD_DUE');
+    assert.strictEqual(result.settlements[0].settledAmount, 5000);
+    assert.strictEqual(result.settlements[1].forMonth, '2025-01');
+    assert.strictEqual(result.settlements[1].settledAmount, 2000);
+  });
 });
 
 // ─── recalculateAllSettlements ───
@@ -337,6 +379,13 @@ describe('getLoanStatus', () => {
     };
     const status = getLoanStatus(loan, [], '2025-05');
     assert.strictEqual(status.outstandingPrincipal, 200000);
+  });
+
+  it('includes old due in total pending', () => {
+    const loan = { ...baseLoan, oldDue: 5000 };
+    const status = getLoanStatus(loan, [], '2025-01');
+    assert.strictEqual(status.oldDueRemaining, 5000);
+    assert.strictEqual(status.totalPending, 11000);
   });
 });
 

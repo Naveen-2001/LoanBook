@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import db from '../db';
 import { settle, formatINR, monthLabel } from '../utils/settlement';
 import ToastContainer, { toast } from '../components/Toast';
 import { generateId } from '../utils/uuid';
+import { normalizePaymentRecord, paymentBelongsToLoan } from '../utils/relations';
 
 export default function RecordPayment() {
   const { id } = useParams();
@@ -23,9 +24,9 @@ export default function RecordPayment() {
         const l = await db.loans.get(Number(id));
         if (!l) { toast('Loan not found'); nav(-1); return; }
         setLoan(l);
-        const allPayments = await db.payments.toArray();
-        setExistingPayments(allPayments.filter(p => String(p.loanId) === String(l.id)));
-      } catch (err) {
+        const allPayments = (await db.payments.toArray()).filter(p => !p._deleted);
+        setExistingPayments(allPayments.filter(p => paymentBelongsToLoan(p, l)));
+      } catch {
         toast('Error loading loan');
       }
     })();
@@ -46,17 +47,21 @@ export default function RecordPayment() {
 
     try {
       const syncId = generateId();
-      const paymentId = await db.payments.add({
-        loanId: String(loan.id),
+      const paymentId = await db.payments.add(normalizePaymentRecord({
+        loanId: loan.syncId,
+        loanSyncId: loan.syncId,
         amount: amt,
         paidDate: new Date(paidDate).toISOString(),
         mode,
         notes,
         settlements: preview.settlements,
         syncId,
-        syncStatus: 'pending',
         updatedAt: new Date().toISOString(),
-      });
+      }, {
+        syncStatus: 'pending',
+        _deleted: false,
+        deletedAt: null,
+      }));
 
       nav(`/receipt/${paymentId}`, { replace: true });
     } catch (err) {

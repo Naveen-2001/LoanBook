@@ -12,13 +12,9 @@ import './styles.css';
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
-  const [hasPin, setHasPin] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [hasPin, setHasPin] = useState(() => !!localStorage.getItem('loanbook_pin'));
 
   useEffect(() => {
-    const pin = localStorage.getItem('loanbook_pin');
-    setHasPin(!!pin);
-
     // Auto-lock after 2 min in background
     let lockTimer;
     const handleVisibility = () => {
@@ -29,7 +25,6 @@ export default function App() {
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
-    setChecking(false);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       clearTimeout(lockTimer);
@@ -40,8 +35,6 @@ export default function App() {
   useEffect(() => {
     if (unlocked) checkDueNotifications();
   }, [unlocked]);
-
-  if (checking) return null;
 
   if (!unlocked) {
     return <PinLock hasPin={hasPin} onUnlock={() => setUnlocked(true)} onSetPin={() => setHasPin(true)} />;

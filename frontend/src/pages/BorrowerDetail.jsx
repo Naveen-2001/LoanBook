@@ -4,6 +4,7 @@ import db from '../db';
 import { getLoanStatus, formatINR } from '../utils/settlement';
 import ToastContainer, { toast } from '../components/Toast';
 import { generateId } from '../utils/uuid';
+import { loanBelongsToBorrower, paymentBelongsToLoan, normalizeLoanRecord } from '../utils/relations';
 
 export default function BorrowerDetail() {
   const { id } = useParams();
@@ -23,12 +24,12 @@ export default function BorrowerDetail() {
       setBorrower(b);
       setEditForm({ name: b.name, notes: b.notes || '' });
 
-      const allLoans = await db.loans.toArray();
-      const bLoans = allLoans.filter(l => String(l.borrowerId) === String(b.id));
-      const allPayments = await db.payments.toArray();
+      const allLoans = (await db.loans.toArray()).filter(l => !l._deleted);
+      const bLoans = allLoans.filter(l => loanBelongsToBorrower(l, b));
+      const allPayments = (await db.payments.toArray()).filter(p => !p._deleted);
 
       const enriched = bLoans.map(loan => {
-        const lPayments = allPayments.filter(p => String(p.loanId) === String(loan.id));
+        const lPayments = allPayments.filter(p => paymentBelongsToLoan(p, loan));
         const status = getLoanStatus(loan, lPayments);
         return { ...loan, ...status };
       });
@@ -51,8 +52,9 @@ export default function BorrowerDetail() {
 
     try {
       const syncId = generateId();
-      await db.loans.add({
-        borrowerId: String(borrower.id),
+      await db.loans.add(normalizeLoanRecord({
+        borrowerId: borrower.syncId,
+        borrowerSyncId: borrower.syncId,
         principal,
         ratePerMonth,
         startDate: form.startDate,
@@ -64,9 +66,12 @@ export default function BorrowerDetail() {
         rateHistory: [],
         principalRepayments: [],
         syncId,
-        syncStatus: 'pending',
         updatedAt: new Date().toISOString(),
-      });
+      }, {
+        syncStatus: 'pending',
+        _deleted: false,
+        deletedAt: null,
+      }));
 
       setShowAddLoan(false);
       setForm({ principal: '', ratePerMonth: '', startDate: currentMonth, startMode: 'current', dateGiven: '', notes: '', paymentFrequency: '1', oldDue: '' });
@@ -78,7 +83,13 @@ export default function BorrowerDetail() {
   };
 
   const updateBorrower = async () => {
-    await db.borrowers.update(Number(id), { name: editForm.name, notes: editForm.notes, syncStatus: 'pending', updatedAt: new Date().toISOString() });
+    await db.borrowers.update(Number(id), {
+      name: editForm.name,
+      notes: editForm.notes,
+      syncStatus: 'pending',
+      updatedAt: new Date().toISOString(),
+      _deleted: false,
+    });
     setShowEdit(false);
     loadData();
     toast('Borrower updated');
@@ -88,14 +99,28 @@ export default function BorrowerDetail() {
     if (!confirm('Delete this borrower and ALL their loans and payments? This cannot be undone.')) return;
     try {
       const allLoans = await db.loans.toArray();
-      const bLoans = allLoans.filter(l => String(l.borrowerId) === String(id));
+      const bLoans = allLoans.filter(l => loanBelongsToBorrower(l, borrower));
       const allPayments = await db.payments.toArray();
       for (const loan of bLoans) {
-        const lPayments = allPayments.filter(p => String(p.loanId) === String(loan.id));
-        for (const p of lPayments) await db.payments.delete(p.id);
-        await db.loans.delete(loan.id);
+        const lPayments = allPayments.filter(p => paymentBelongsToLoan(p, loan));
+        for (const p of lPayments) {
+          if (p.serverId) {
+            await db.payments.update(p.id, { _deleted: true, syncStatus: 'pending', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+          } else {
+            await db.payments.delete(p.id);
+          }
+        }
+        if (loan.serverId) {
+          await db.loans.update(loan.id, { _deleted: true, syncStatus: 'pending', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        } else {
+          await db.loans.delete(loan.id);
+        }
       }
-      await db.borrowers.delete(Number(id));
+      if (borrower.serverId) {
+        await db.borrowers.update(Number(id), { _deleted: true, syncStatus: 'pending', deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      } else {
+        await db.borrowers.delete(Number(id));
+      }
       toast('Borrower deleted');
       nav('/');
     } catch (err) {

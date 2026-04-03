@@ -141,6 +141,27 @@ export function settle(loan, existingPayments, newAmount, upToMonth) {
   return { settlements, excess: Math.max(0, remaining) };
 }
 
+export function recalculateAllSettlements(loan, payments, upToMonth) {
+  const sorted = [...payments].sort((a, b) => {
+    const dateA = new Date(a.paidDate);
+    const dateB = new Date(b.paidDate);
+    if (dateA.getTime() !== dateB.getTime()) return dateA - dateB;
+    return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+  });
+
+  const results = [];
+  const priorPayments = [];
+
+  for (const payment of sorted) {
+    const { settlements } = settle(loan, priorPayments, payment.amount, upToMonth);
+    const updated = { ...payment, settlements };
+    results.push(updated);
+    priorPayments.push(updated);
+  }
+
+  return results;
+}
+
 export function getLoanStatus(loan, payments, upToMonth) {
   const dues = calculateMonthlyDues(loan, upToMonth);
   const paid = buildPaidMap(payments);
