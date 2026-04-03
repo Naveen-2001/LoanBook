@@ -12,7 +12,7 @@ const {
   generateSettlementSummary,
 } = require('../services/settlement');
 
-const { getMonthRange, compareMonths } = require('../utils/monthHelpers');
+const { getMonthRange, compareMonths, getNextMonth } = require('../utils/monthHelpers');
 
 function withMockedNow(isoString, fn) {
   const RealDate = Date;
@@ -70,6 +70,11 @@ describe('monthHelpers', () => {
     assert.ok(compareMonths('2025-12', '2025-01') > 0);
     assert.ok(compareMonths('2025-06', '2025-06') === 0);
     assert.ok(compareMonths('2024-12', '2025-01') < 0);
+  });
+
+  it('getNextMonth handles normal and year boundary cases', () => {
+    assert.strictEqual(getNextMonth('2025-01'), '2025-02');
+    assert.strictEqual(getNextMonth('2025-12'), '2026-01');
   });
 });
 
@@ -184,8 +189,16 @@ describe('calculateMonthlyDues', () => {
     const loan = { ...baseLoan, startDate: '2025-01', dateGiven: '2025-01-24' };
     const duesBeforeDueDay = withMockedNow('2025-03-20T00:00:00.000Z', () => calculateMonthlyDues(loan));
     const duesAfterDueDay = withMockedNow('2025-04-25T00:00:00.000Z', () => calculateMonthlyDues(loan));
-    assert.deepStrictEqual(duesBeforeDueDay.map(d => d.month), ['2025-01']);
-    assert.deepStrictEqual(duesAfterDueDay.map(d => d.month), ['2025-01', '2025-02', '2025-03']);
+    assert.deepStrictEqual(duesBeforeDueDay.map(d => d.month), ['2025-02']);
+    assert.deepStrictEqual(duesAfterDueDay.map(d => d.month), ['2025-02', '2025-03', '2025-04']);
+  });
+
+  it('counts ten due months for a May 20 loan on April 4 next year', () => {
+    const loan = { ...baseLoan, startDate: '2025-05', dateGiven: '2025-05-20' };
+    const dues = withMockedNow('2026-04-04T00:00:00.000Z', () => calculateMonthlyDues(loan));
+    assert.strictEqual(dues.length, 10);
+    assert.strictEqual(dues[0].month, '2025-06');
+    assert.strictEqual(dues[9].month, '2026-03');
   });
 });
 

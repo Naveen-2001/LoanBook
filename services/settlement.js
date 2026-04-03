@@ -1,4 +1,4 @@
-const { getMonthRange, getCurrentMonth, compareMonths, dateToMonth, getPreviousMonth } = require('../utils/monthHelpers');
+const { getMonthRange, getCurrentMonth, compareMonths, dateToMonth, getPreviousMonth, getNextMonth } = require('../utils/monthHelpers');
 
 /**
  * Get the applicable interest rate for a given month.
@@ -62,9 +62,10 @@ function getPrincipalForMonth(loan, month) {
  * Returns an array of { month, due } objects.
  */
 function calculateMonthlyDues(loan, upToMonth) {
-  const startMonth = typeof loan.startDate === 'string' && loan.startDate.length === 7
+  const baseStartMonth = typeof loan.startDate === 'string' && loan.startDate.length === 7
     ? loan.startDate
     : dateToMonth(loan.startDate);
+  const startMonth = loan.dateGiven ? getNextMonth(baseStartMonth) : baseStartMonth;
 
   let endMonth;
   if (upToMonth) {
@@ -74,8 +75,8 @@ function calculateMonthlyDues(loan, upToMonth) {
     const today = new Date();
     const currentMonth = getCurrentMonth();
     endMonth = today.getDate() >= dueDay
-      ? getPreviousMonth(currentMonth)
-      : getPreviousMonth(getPreviousMonth(currentMonth));
+      ? currentMonth
+      : getPreviousMonth(currentMonth);
   } else {
     // Interest for month X is due in month X+1, so dues go up to previous month.
     endMonth = getPreviousMonth(getCurrentMonth());

@@ -74,6 +74,12 @@ function getPreviousMonth(monthStr) {
   return formatMonth(year, month - 1);
 }
 
+function getNextMonth(monthStr) {
+  const { year, month } = parseMonth(monthStr);
+  if (month === 12) return formatMonth(year + 1, 1);
+  return formatMonth(year, month + 1);
+}
+
 module.exports = {
   getCurrentMonth,
   formatMonth,
@@ -82,4 +88,5 @@ module.exports = {
   compareMonths,
   dateToMonth,
   getPreviousMonth,
+  getNextMonth,
 };
