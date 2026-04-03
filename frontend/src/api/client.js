@@ -5,7 +5,7 @@ import {
   normalizePaymentRecord,
 } from '../utils/relations';
 
-const API_URL = localStorage.getItem('loanbook_api_url') || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
+const API_URL = '';
 
 function getToken() {
   return localStorage.getItem('loanbook_token');
@@ -58,6 +58,16 @@ export function logout() {
   localStorage.removeItem('loanbook_token');
 }
 
+async function hasAnyLocalData() {
+  const [borrowers, loans, payments] = await Promise.all([
+    db.borrowers.count(),
+    db.loans.count(),
+    db.payments.count(),
+  ]);
+
+  return borrowers + loans + payments > 0;
+}
+
 async function getPendingRecords() {
   const [borrowers, loans, payments] = await Promise.all([
     db.borrowers.where('syncStatus').equals('pending').toArray(),
@@ -77,6 +87,7 @@ function toSyncPayload(item) {
     syncId: item.syncId,
     action: item._deleted ? 'delete' : (item.serverId ? 'update' : 'create'),
     type: item._type,
+    serverId: item.serverId || null,
   };
 
   if (item._type === 'borrower') {
@@ -264,7 +275,21 @@ export async function syncToServer() {
   if (pending.length === 0) return { synced: 0 };
 
   try {
-    const changes = pending.map(toSyncPayload);
+    const changes = pending
+      .filter(item => !item._deleted || item.serverId)
+      .map(toSyncPayload);
+
+    for (const item of pending.filter(entry => entry._deleted && !entry.serverId)) {
+      const table = item._type === 'borrower'
+        ? db.borrowers
+        : item._type === 'loan'
+          ? db.loans
+          : db.payments;
+      await table.delete(item.id);
+    }
+
+    if (changes.length === 0) return { synced: 0 };
+
     const result = await request('/api/sync/push', {
       method: 'POST',
       body: JSON.stringify({ changes }),
@@ -279,7 +304,10 @@ export async function syncToServer() {
 
 export async function pullFromServer() {
   try {
-    const lastSync = localStorage.getItem('loanbook_last_sync') || '1970-01-01T00:00:00.000Z';
+    const useIncrementalSync = await hasAnyLocalData();
+    const lastSync = useIncrementalSync
+      ? (localStorage.getItem('loanbook_last_sync') || '1970-01-01T00:00:00.000Z')
+      : '1970-01-01T00:00:00.000Z';
     const data = await request(`/api/sync/pull?since=${encodeURIComponent(lastSync)}`);
 
     await upsertBorrowers(data.borrowers || []);
@@ -293,4 +321,4 @@ export async function pullFromServer() {
   }
 }
 
-export { request, API_URL };
+export { request };

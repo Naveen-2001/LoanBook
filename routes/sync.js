@@ -22,10 +22,12 @@ function sanitizeBorrowerPayload(data, syncId) {
 }
 
 async function sanitizeLoanPayload(data, syncId) {
-  let borrowerId = data.borrowerId;
-  if (!borrowerId && data.borrowerSyncId) {
+  let borrowerId = null;
+  if (data.borrowerSyncId) {
     const borrower = await Borrower.findOne({ syncId: data.borrowerSyncId, deletedAt: null }).select('_id').lean();
     borrowerId = borrower?._id;
+  } else if (data.borrowerId) {
+    borrowerId = data.borrowerId;
   }
 
   return {
@@ -46,10 +48,12 @@ async function sanitizeLoanPayload(data, syncId) {
 }
 
 async function sanitizePaymentPayload(data, syncId) {
-  let loanId = data.loanId;
-  if (!loanId && data.loanSyncId) {
+  let loanId = null;
+  if (data.loanSyncId) {
     const loan = await Loan.findOne({ syncId: data.loanSyncId, deletedAt: null }).select('_id').lean();
     loanId = loan?._id;
+  } else if (data.loanId) {
+    loanId = data.loanId;
   }
 
   return {
@@ -82,7 +86,7 @@ router.post('/push', async (req, res) => {
     const results = [];
 
     for (const change of changes) {
-      const { type, action, data = {}, syncId } = change;
+      const { type, action, data = {}, syncId, serverId } = change;
       const Model = getModel(type);
 
       if (!Model) {
@@ -92,8 +96,13 @@ router.post('/push', async (req, res) => {
 
       try {
         if (action === 'delete') {
+          if (!serverId) {
+            results.push({ syncId, status: 'skipped', error: 'Delete ignored without serverId' });
+            continue;
+          }
+
           const doc = await Model.findOneAndUpdate(
-            { syncId },
+            { syncId, _id: serverId },
             { deletedAt: new Date() },
             { new: true }
           );

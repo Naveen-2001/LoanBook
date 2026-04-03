@@ -10,18 +10,21 @@ export default function Settings() {
   const nav = useNavigate();
   const [loggedIn, setLoggedIn] = useState(isLoggedIn());
   const [pin, setPin] = useState('');
-  const [apiUrl, setApiUrl] = useState(localStorage.getItem('loanbook_api_url') || 'http://localhost:3001');
   const [pendingCount, setPendingCount] = useState(0);
   const [lastSync, setLastSync] = useState(localStorage.getItem('loanbook_last_sync') || 'Never');
   const [showChangePin, setShowChangePin] = useState(false);
   const [newPin, setNewPin] = useState('');
 
+  const refreshPendingCount = async () => {
+    const pending = (await db.borrowers.where('syncStatus').equals('pending').count())
+      + (await db.loans.where('syncStatus').equals('pending').count())
+      + (await db.payments.where('syncStatus').equals('pending').count());
+    setPendingCount(pending);
+  };
+
   useEffect(() => {
     (async () => {
-      const pending = (await db.borrowers.where('syncStatus').equals('pending').count())
-        + (await db.loans.where('syncStatus').equals('pending').count())
-        + (await db.payments.where('syncStatus').equals('pending').count());
-      setPendingCount(pending);
+      await refreshPendingCount();
     })();
   }, []);
 
@@ -29,9 +32,12 @@ export default function Settings() {
     if (!pin) return;
     try {
       await login(pin);
+      const pull = await pullFromServer();
       setLoggedIn(true);
       setPin('');
-      toast('Logged in to server');
+      setLastSync(localStorage.getItem('loanbook_last_sync') || 'Never');
+      await refreshPendingCount();
+      toast(pull.offline ? 'Logged in, but initial sync failed' : `Logged in. Pulled ${pull.pulled} records`);
     } catch (err) {
       toast(err.message === 'Invalid PIN' ? 'Wrong server PIN' : 'Connection failed');
     }
@@ -51,16 +57,8 @@ export default function Settings() {
     if (push.offline) { toast('Offline'); return; }
     toast(`Done: ${push.synced} pushed, ${pull.pulled} pulled`);
 
-    const pending = (await db.borrowers.where('syncStatus').equals('pending').count())
-      + (await db.loans.where('syncStatus').equals('pending').count())
-      + (await db.payments.where('syncStatus').equals('pending').count());
-    setPendingCount(pending);
+    await refreshPendingCount();
     setLastSync(localStorage.getItem('loanbook_last_sync'));
-  };
-
-  const saveApiUrl = () => {
-    localStorage.setItem('loanbook_api_url', apiUrl);
-    toast('API URL saved — reload app to apply');
   };
 
   const changeAppPin = () => {
@@ -163,7 +161,7 @@ export default function Settings() {
       toast('Data restored successfully');
     } catch {
       e.target.value = '';
-      toast('Failed to import — invalid file');
+      toast('Failed to import - invalid file');
     }
   };
 
@@ -173,6 +171,8 @@ export default function Settings() {
     await db.borrowers.clear();
     await db.loans.clear();
     await db.payments.clear();
+    logout();
+    setLoggedIn(false);
     localStorage.removeItem('loanbook_last_sync');
     toast('All data cleared');
   };
@@ -184,16 +184,7 @@ export default function Settings() {
         <h1>Settings</h1>
       </div>
       <div className="page-content">
-        {/* Server Connection */}
         <h3 style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8, letterSpacing: 0.5 }}>SERVER</h3>
-
-        <div className="form-group">
-          <label>API URL</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={apiUrl} onChange={e => setApiUrl(e.target.value)} style={{ flex: 1 }} />
-            <button className="btn btn-small btn-secondary" onClick={saveApiUrl}>Save</button>
-          </div>
-        </div>
 
         {!loggedIn ? (
           <div className="form-group">
@@ -217,7 +208,6 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Security */}
         <h3 style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8, marginTop: 24, letterSpacing: 0.5 }}>SECURITY</h3>
 
         <div className="setting-item" onClick={() => setShowChangePin(true)} style={{ cursor: 'pointer' }}>
@@ -240,7 +230,6 @@ export default function Settings() {
           </div>
         )}
 
-        {/* Backup & Restore */}
         <h3 style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8, marginTop: 24, letterSpacing: 0.5 }}>DATA</h3>
 
         <div className="setting-item" onClick={exportData} style={{ cursor: 'pointer' }}>
@@ -264,7 +253,7 @@ export default function Settings() {
         <div className="setting-item" onClick={clearAllData} style={{ cursor: 'pointer' }}>
           <div>
             <div className="label" style={{ color: 'var(--red)' }}>Clear All Data</div>
-            <div className="desc">Delete everything — cannot be undone</div>
+            <div className="desc">Delete everything - cannot be undone</div>
           </div>
         </div>
       </div>
